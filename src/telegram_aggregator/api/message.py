@@ -71,3 +71,14 @@ async def fetch_all_messages(channels):
     for channel in channels:
         all_data.extend(await get_last_5_messages(channel))
     return all_data
+
+
+def get_messages(channels, username):
+    logger.info(f"Channels to fetch: {channels}")
+    with client:
+        all_messages = client.loop.run_until_complete(fetch_all_messages(channels))
+        df = pd.DataFrame(all_messages, columns=['time', 'message_text', 'message_id', 'channel_name'])
+        user_directory = f"output/{username}"
+        if not os.path.exists(user_directory):
+            os.makedirs(user_directory)
+        df.to_excel(f"{user_directory}/data.xlsx", index=False)
