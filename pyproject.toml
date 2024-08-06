@@ -20,6 +20,8 @@ classifiers = [  #
 ]
 
 dependencies = [
+    "pyTelegramBotAPI",
+    "openpyxl",
     "telethon==1.36.0",
     "pandas==2.1.4",
     "omegaconf==2.3.0",
