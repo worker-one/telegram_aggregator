@@ -21,6 +21,9 @@ classifiers = [  #
 
 dependencies = [
     "pyTelegramBotAPI",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
     "openpyxl",
     "telethon==1.36.0",
     "pandas==2.1.4",
