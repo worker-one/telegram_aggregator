@@ -13,6 +13,8 @@ tests/fixtures/cached_*_text.txt
 logs/
 lightning_logs/
 lang_code_data/
+output/
+input/
 
 # Distribution / packaging
 .Python
@@ -167,3 +169,6 @@ tags
 
 # ruff
 .ruff_cache
+
+# telethin sessions
+*.session
