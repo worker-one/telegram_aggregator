@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base
 
 # Load logging configuration with OmegaConf
-logging_config = OmegaConf.to_container(OmegaConf.load("./src/telegram_bot/conf/logging_config.yaml"), resolve=True)
+logging_config = OmegaConf.to_container(OmegaConf.load("./src/telegram_aggregator/conf/logging_config.yaml"), resolve=True)
 
 # Apply the logging configuration
 logging.config.dictConfig(logging_config)
@@ -25,7 +25,7 @@ if DATABASE_URL is None:
     exit(1)
 
 def get_enginge():
-    return create_engine(DATABASE_URL)
+    return create_engine(DATABASE_URL, connect_args={'connect_timeout': 10})
 
 def create_tables():
     engine = get_enginge()
