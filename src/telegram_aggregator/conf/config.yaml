@@ -1,3 +1,5 @@
 channels:
   - "@trucking1"
   - "@spectekhnika_pitere"
+interval_seconds: 120
+last_n_messages: 10
