@@ -1,20 +1,14 @@
+import asyncio
 import logging.config
 import os
 
 from dotenv import find_dotenv, load_dotenv
-from omegaconf import OmegaConf
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from .models import Base
 
-# Load logging configuration with OmegaConf
-logging_config = OmegaConf.to_container(OmegaConf.load("./src/telegram_aggregator/conf/logging_config.yaml"), resolve=True)
-
-# Apply the logging configuration
-logging.config.dictConfig(logging_config)
-
-# Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv(find_dotenv(usecwd=True))
@@ -28,30 +22,35 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 SSL_MODE = os.getenv("SSL_MODE")
 DATABASE_URL = None
 
-# Check if any of the required environment variables are not set
+# Check if required environment variables are set
 if not all([DB_HOST, DB_NAME, DB_USER, DB_PASSWORD]):
-    logger.warning("One or more database environment variables are not set. Database is not connected.")
+    logger.error("One or more critical database environment variables are not set. Exiting.")
+    raise SystemExit("Database configuration incomplete.")
 else:
     # Construct the database URL
-    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     if SSL_MODE:
         DATABASE_URL += f"?sslmode={SSL_MODE}"
 
-def db_available():
-    return DATABASE_URL is not None
+# Create the async engine
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args={'connect_timeout': 10, "application_name": "telegram_aggregator"}
+)
 
-def get_enginge():
-    logger.info(f"Connecting to database: {DATABASE_URL}")
-    return create_engine(
-        DATABASE_URL,
-        connect_args={'connect_timeout': 10, "application_name": "telegram_aggregator"}
-    )
-
-def create_tables():
-    engine = get_enginge()
-    Base.metadata.create_all(engine)
-    logger.info("Tables created")
+# Create a configured "Session" class
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
 def get_session():
-    engine = get_enginge()
-    return sessionmaker(bind=engine)()
+    """Provide a transactional scope around a series of operations."""
+    return AsyncSessionLocal
+
+async def create_tables():
+    """Create database tables based on the metadata."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Tables created successfully.")

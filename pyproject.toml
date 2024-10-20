@@ -20,14 +20,14 @@ classifiers = [  #
 ]
 
 dependencies = [
-    "pyTelegramBotAPI",
     "openpyxl",
     "telethon==1.36.0",
     "pandas==2.1.4",
     "omegaconf==2.3.0",
-    "sqlalchemy==1.4.25",
-    "psycopg2-binary",
-    "python-dotenv"
+    "sqlalchemy==2.0.36",
+    "python-dotenv",
+    "fastapi",
+    "uvicorn"
 ]
 
 [project.optional-dependencies]

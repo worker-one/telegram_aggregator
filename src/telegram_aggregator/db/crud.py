@@ -1,88 +1,127 @@
 import datetime
 import logging
-from sqlalchemy import select, and_
+from typing import Optional
 
-from omegaconf import OmegaConf
-from .models import Message, Channel
+from sqlalchemy import and_, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.future import select
+
 from .database import get_session
-
-
-# Load logging configuration with OmegaConf
-logging_config = OmegaConf.to_container(OmegaConf.load("./src/telegram_aggregator/conf/logging_config.yaml"), resolve=True)
-
-# Apply the logging configuration
-logging.config.dictConfig(logging_config)
+from .models import Channel, Message
 
 # Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-def add_message(
-        id: int,
-        datetime: datetime.datetime,
+async def add_message(
+        message_id: int,
+        message_datetime: datetime.datetime,
         content: str,
         channel_name: str
     ) -> None:
-    session = get_session()
-    try:
-        # Check if a record with the same primary key (message_id) already exists
-        existing_message = session.query(Message).filter_by(id=id).first()
+    """
+    Add a new message to the database if it doesn't already exist.
 
-        if existing_message is None:
-            # If no existing record is found, add the new message
-            message = Message(
-                id=id,
-                datetime=datetime,
-                content=content,
-                channel_name=channel_name
-            )
-            session.add(message)
-            session.commit()
-            logger.info(f"Message added to the database: {message.id}")
-        else:
-            logger.info(f"Message with id `{id}` already exists, not adding.")
-    except Exception as e:
-        session.rollback()
-        logger.error(f"An error occurred: {e}")
-    finally:
-        session.close()
+    Args:
+        message_id (int): The unique identifier of the message.
+        message_datetime (datetime.datetime): The timestamp of the message.
+        content (str): The content of the message.
+        channel_name (str): The name of the channel.
+    """
+    session_maker = get_session()
+    async with session_maker() as session:
+        async with session.begin():
+            stmt = select(Message).where(Message.id == message_id)
+            result = await session.execute(stmt)
+            existing_message: Optional[Message] = result.scalar_one_or_none()
 
-def add_channel(name: str, comment: str = None) -> None:
-    session = get_session()
-    channel = Channel(name=name, comment=comment)
-    session.add(channel)
-    session.commit()
-    logger.info(f"Channel added to the database: {channel}")
-    session.close()
+            if existing_message is None:
+                message = Message(
+                    id=message_id,
+                    datetime=message_datetime,
+                    content=content,
+                    channel_name=channel_name
+                )
+                session.add(message)
+                logger.info(f"Message added to the database: {message.id}")
+            else:
+                logger.info(f"Message with id `{message_id}` already exists, not adding.")
 
-def get_channel_names() -> list[str]:
-    session = get_session()
-    try:
-        # Query to get distinct channel names
-        query = select(Channel.name).distinct()
-        result = session.execute(query)
+async def add_channel(name: str, comment: Optional[str] = None) -> None:
+    """
+    Add a new channel to the database if it doesn't already exist.
 
-        # Fetch all distinct channel names
-        channel_names = [row[0] for row in result]
-        return channel_names
-    finally:
-        session.close()
+    Args:
+        name (str): The name of the channel.
+        comment (Optional[str]): Optional comment about the channel.
+    """
+    session_maker = get_session()
+    async with session_maker() as session:
+        try:
+            async with session.begin():
+                stmt = select(Channel).where(Channel.name == name)
+                result = await session.execute(stmt)
+                existing_channel: Optional[Channel] = result.scalar_one_or_none()
 
-def get_messages_in_timerange(
+                if existing_channel is None:
+                    channel = Channel(
+                        name=name,
+                        comment=comment
+                    )
+                    session.add(channel)
+                    logger.info(f"Channel added to the database: {channel.name}")
+                else:
+                    logger.info(f"Channel with name `{name}` already exists, not adding.")
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to add channel `{name}`: {e}")
+            raise
+
+async def get_channel_names() -> list[str]:
+    """
+    Retrieve all channel names from the database.
+
+    Returns:
+        A list of channel names.
+    """
+    session_maker = get_session()
+    async with session_maker() as session:
+        try:
+            async with session.begin():
+                stmt = select(Channel.name)
+                result = await session.execute(stmt)
+                channels = result.scalars().all()
+                return channels
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to retrieve channel names: {e}")
+            return []
+
+async def get_messages_in_timerange(
         start_time: datetime.datetime,
         end_time: datetime.datetime
     ) -> list[Message]:
-    session = get_session()
-    try:
-        # Query to filter messages based on the time range
-        query = select(Message).where(
-            and_(Message.datetime >= start_time, Message.datetime <= end_time)
-        )
-        result = session.execute(query)
+    """
+    Retrieve all messages within a specified time range.
 
-        # Fetch all messages in the given time range
-        messages = result.scalars().all()
-        return messages
+    Args:
+        start_time (datetime.datetime): The start of the time range.
+        end_time (datetime.datetime): The end of the time range.
 
-    finally:
-        session.close()
+    Returns:
+        list[Message]: A list of messages within the time range.
+    """
+    session_maker = get_session()
+    async with session_maker() as session:
+        try:
+            async with session.begin():
+                stmt = select(Message).where(
+                    and_(
+                        Message.datetime >= start_time,
+                        Message.datetime <= end_time
+                    )
+                )
+                result = await session.execute(stmt)
+                messages = result.scalars().all()
+                return messages
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to retrieve messages in timerange: {e}")
+            return []
